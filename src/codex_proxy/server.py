@@ -13,6 +13,7 @@ from .providers.zai import ZAIProvider
 from .normalizer import RequestNormalizer
 from .utils import json_loads
 from .validator import RequestValidator
+from . import ui as _ui
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,24 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 class ProxyRequestHandler(BaseHTTPRequestHandler):
     """Handles incoming Codex requests and routes them to appropriate providers."""
 
+    def do_GET(self):
+        if self.path in ("/", "/ui"):
+            body = _ui.get_html()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/config":
+            body = json.dumps(_ui.get_current_config()).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_error(404, "Not found")
+
     def do_POST(self):
         try:
             self._handle_post()
@@ -93,6 +112,28 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_post(self):
         logger.info(f"POST {self.path}")
+
+        # Config UI save endpoint
+        if self.path == "/config":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length) if content_length else b"{}"
+            try:
+                data = json_loads(body)
+                result = _ui.apply_and_save(data)
+                resp = json.dumps(result).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(resp)))
+                self.end_headers()
+                self.wfile.write(resp)
+            except (ValueError, TypeError) as e:
+                err = json.dumps({"error": str(e)}).encode("utf-8")
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err)))
+                self.end_headers()
+                self.wfile.write(err)
+            return
 
         if self.path not in (
             "/v1/responses",

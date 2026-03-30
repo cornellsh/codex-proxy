@@ -78,7 +78,7 @@ class ZAIProvider(BaseProvider):
     ) -> None:
         """Perform the actual API call and handle response."""
         auth_header = handler.headers.get("Authorization")
-        if not auth_header and config.z_ai_api_key:
+        if config.z_ai_api_key:
             auth_header = f"Bearer {config.z_ai_api_key}"
 
         stream = payload.get("stream", False)
@@ -91,6 +91,7 @@ class ZAIProvider(BaseProvider):
                 stream=stream,
                 timeout=(config.request_timeout_connect, config.request_timeout_read),
             ) as resp:
+                logger.info("Z.AI response status: %s", resp.status_code)
                 if stream:
                     self._handle_stream_response(resp, payload, handler)
                 else:
